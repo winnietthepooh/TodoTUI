@@ -63,6 +63,23 @@ func (m *Model) Prev() {
 	}
 }
 
+func (m *Model) MoveToNext() tea.Msg {
+	selectedItem := m.lists[m.focused].SelectedItem()
+	selectedTask := selectedItem.(Task)
+	m.lists[selectedTask.status].RemoveItem(m.lists[m.focused].Index())
+	selectedTask.Next()
+	m.lists[selectedTask.status].InsertItem(len(m.lists[selectedTask.status].Items())-1, list.Item(selectedTask))
+	return nil
+}
+
+func (t Task) Next() {
+	if t.status == done {
+		t.status = todo
+	} else {
+		t.status += 1
+	}
+}
+
 func (m *Model) initLists(width, height int) {
 	defaultList := list.New([]list.Item{}, list.NewDefaultDelegate(), width/divisor, (height-divisor)/2)
 	defaultList.SetShowHelp(false)
@@ -105,6 +122,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Prev()
 		case "right", "l":
 			m.Next()
+		case "enter":
+			return m, m.MoveToNext
 		}
 	}
 	var cmd tea.Cmd
