@@ -8,7 +8,7 @@ import tea "github.com/charmbracelet/bubbletea"
 
 type status int
 
-const divisor = 3
+const divisor = 4
 const (
 	todo status = iota
 	inProgress
@@ -20,6 +20,12 @@ type Task struct {
 	title       string
 	description string
 }
+
+var (
+	columnStyle  = lipgloss.NewStyle().Padding(1, 2)
+	focusedStyle = lipgloss.NewStyle().Padding(1, 2).Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("62"))
+	helpStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+)
 
 func (t Task) FilterValue() string {
 	return t.title
@@ -34,14 +40,31 @@ func (t Task) Description() string {
 }
 
 type Model struct {
-	focused status
-	lists   []list.Model
-	err     error
-	loaded  bool
+	focused  status
+	lists    []list.Model
+	err      error
+	loaded   bool
+	quitting bool
+}
+
+func (m *Model) Next() {
+	if m.focused < done {
+		m.focused += 1
+	} else {
+		m.focused = done
+	}
+}
+
+func (m *Model) Prev() {
+	if m.focused > todo {
+		m.focused -= 1
+	} else {
+		m.focused = done
+	}
 }
 
 func (m *Model) initLists(width, height int) {
-	defaultList := list.New([]list.Item{}, list.NewDefaultDelegate(), width/divisor-2, height)
+	defaultList := list.New([]list.Item{}, list.NewDefaultDelegate(), width/divisor, (height-divisor)/2)
 	defaultList.SetShowHelp(false)
 	m.lists = []list.Model{defaultList, defaultList, defaultList}
 	m.lists[todo].Title = "To Do"
@@ -68,8 +91,20 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		if !m.loaded {
+			columnStyle.Width(msg.Width / divisor)
+			focusedStyle.Width(msg.Width / divisor)
 			m.initLists(msg.Width, msg.Height)
 			m.loaded = true
+		}
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c", "q":
+			m.quitting = true
+			return m, tea.Quit
+		case "left", "h":
+			m.Prev()
+		case "right", "l":
+			m.Next()
 		}
 	}
 	var cmd tea.Cmd
@@ -78,10 +113,24 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) View() string {
-	if m.loaded {
-		return lipgloss.JoinHorizontal(lipgloss.Left, m.lists[todo].View(), m.lists[inProgress].View(), m.lists[done].View())
-	} else {
+	if m.quitting {
 		return ""
+	}
+	if m.loaded {
+		todoView := m.lists[todo].View()
+		inProgressView := m.lists[inProgress].View()
+		doneView := m.lists[done].View()
+		switch m.focused {
+		default:
+			return lipgloss.JoinHorizontal(lipgloss.Left, focusedStyle.Render(todoView), columnStyle.Render(inProgressView), columnStyle.Render(doneView))
+		case inProgress:
+			return lipgloss.JoinHorizontal(lipgloss.Left, columnStyle.Render(todoView), focusedStyle.Render(inProgressView), columnStyle.Render(doneView))
+		case done:
+			return lipgloss.JoinHorizontal(lipgloss.Left, columnStyle.Render(todoView), columnStyle.Render(inProgressView), focusedStyle.Render(doneView))
+
+		}
+	} else {
+		return "loading..."
 	}
 }
 
